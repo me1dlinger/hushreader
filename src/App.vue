@@ -239,7 +239,7 @@ function pushHushreaderState() {
     `window.hushreaderSetState?.(${JSON.stringify(payload)})`
   )
   void sync?.catch((error) => {
-    console.warn('[MoleReader] hushreader window sync failed', error)
+    console.warn('[HushReader] hushreader window sync failed', error)
   })
 }
 

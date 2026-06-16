@@ -1,4 +1,4 @@
-# MoleReader
+# HushReader
 
 > 隐阅盒 - ZTools 阅读插件，支持 TXT / EPUB 格式，沉浸式阅读
 
