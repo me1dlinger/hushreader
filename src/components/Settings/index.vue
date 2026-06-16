@@ -163,7 +163,7 @@ function commitCapture(targetArr: string[]) {
 
       <!-- Tabs -->
       <div class="tab-bar">
-        <button class="tab-btn" :class="{ active: activeTab === 'hushreader' }" @click="activeTab = 'hushreader'">阅读窗口</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'hushreader' }" @click="activeTab = 'hushreader'">隐阅窗口</button>
         <button class="tab-btn" :class="{ active: activeTab === 'function' }" @click="activeTab = 'function'">功能设置</button>
         <button class="tab-btn" :class="{ active: activeTab === 'other' }" @click="activeTab = 'other'">其他设置</button>
       </div>
@@ -171,7 +171,7 @@ function commitCapture(targetArr: string[]) {
       <!-- Body -->
       <div class="settings-body">
 
-        <!-- ===== 沉浸式阅读窗口 ===== -->
+        <!-- ===== 隐阅窗口 ===== -->
         <div v-if="activeTab === 'hushreader'" class="settings-grid">
 
           <div class="section-label">字体</div>
