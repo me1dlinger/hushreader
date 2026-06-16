@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, inject, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, inject, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useBookStore } from '../../stores/books'
 import { useConfigStore } from '../../stores/config'
 import { useReaderStore } from '../../stores/reader'
@@ -224,7 +224,7 @@ function openCoverPicker(bookId: string) {
 
 async function repairCover(bookId: string) {
   const book = bookStore.books.find(b => b.id === bookId)
-  if (!book || book.format !== 'epub') {
+  if (!book || book.format !== 'epub' || configStore.config.other.plainTextCover) {
     bookStore.updateBook(bookId, { coverImage: undefined })
     return
   }
@@ -291,7 +291,7 @@ async function importBook(filePath: string) {
           const result = await parseEpub(file)
           title = result.title || title
           author = result.author || ''
-          if (result.coverUrl) coverImage = result.coverUrl
+          if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
         }
       } catch {}
     }
@@ -374,6 +374,38 @@ function randomCoverColor(): string {
   ]
   return colors[Math.floor(Math.random() * colors.length)]
 }
+
+async function resolveEpubCovers() {
+  if (configStore.config.other.plainTextCover) return
+  const epubBooks = bookStore.books.filter(b => b.format === 'epub' && !b.coverImage && !b.customCoverImage)
+  for (const book of epubBooks) {
+    try {
+      const content = window.services?.readFileBinary?.(book.filePath)
+      if (!content) continue
+      const blob = new Blob([content], { type: 'application/epub+zip' })
+      const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.epub')
+      const result = await parseEpub(file)
+      if (result.coverUrl) {
+        book.coverImage = result.coverUrl
+      }
+    } catch {}
+  }
+}
+
+watch(() => bookStore.books.length, () => {
+  resolveEpubCovers()
+}, { immediate: true })
+
+watch(() => configStore.config.other.plainTextCover, (plain) => {
+  if (plain) {
+    bookStore.books.forEach(b => {
+      b.coverImage = undefined
+      b.customCoverImage = undefined
+    })
+  } else {
+    resolveEpubCovers()
+  }
+})
 
 const cfg = computed(() => configStore.config)
 </script>
