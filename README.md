@@ -2,6 +2,16 @@
 
 > 隐阅盒 - ZTools 阅读插件，支持 TXT / EPUB 格式，沉浸式阅读
 
+## 截图
+
+![](https://files.seeusercontent.com/2026/06/16/tr3Y/image_83.png)
+
+![](https://files.seeusercontent.com/2026/06/16/zLc1/image_82.png)
+
+![](https://files.seeusercontent.com/2026/06/16/4Uti/image_80.png)
+
+![](https://files.seeusercontent.com/2026/06/16/fjG0/image_81.png)
+
 ## 功能特性
 
 - 支持 TXT / EPUB 格式书籍
@@ -237,4 +247,4 @@ npm run build
 
 ## 开源协议
 
-MIT License
+GPL V3
