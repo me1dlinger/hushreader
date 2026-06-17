@@ -12,6 +12,7 @@ import ContextMenu from './ContextMenu.vue'
 import BookCard from './BookCard.vue'
 import Toast from './Toast.vue'
 import Modal from './Modal.vue'
+import ThemeToggle from './ThemeToggle.vue'
 
 const props = defineProps<{ enterAction?: any }>()
 
@@ -654,6 +655,11 @@ const cfg = computed(() => configStore.config)
 
     <!-- Toast -->
     <Toast :message="toastMsg" :type="toastType" />
+
+    <!-- Theme Toggle -->
+    <div class="theme-toggle-fab">
+      <ThemeToggle />
+    </div>
   </div>
 </template>
 
@@ -1010,4 +1016,11 @@ const cfg = computed(() => configStore.config)
   color: var(--c-ink-inverse);
 }
 .btn-danger:hover { opacity: 0.85; }
+
+.theme-toggle-fab {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100;
+}
 </style>

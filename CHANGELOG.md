@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 - **MOBI 格式支持**：新增 MOBI 电子书格式的解析和阅读功能
 - **MOBI 加密文件解密**：支持加密 MOBI 文件的解析和阅读
+- **主题模式切换**：新增"主题模式"切换
 
 ### Changed
 - **封面和章节内容缓存迁移至 ztools.db 数据库**：封面和章节内容不再每次实时解析，改为存到 ztools.db 数据库，提升书架加载和打开书籍的速度
