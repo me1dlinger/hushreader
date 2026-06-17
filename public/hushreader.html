@@ -274,22 +274,21 @@
     }
 
     .show-meta .hushreader-reader {
-      grid-template-rows: 18px minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
     }
 
     .show-meta .hushreader-content {
-      grid-row: 2;
+      grid-row: 1;
     }
 
     .show-meta .hushreader-meta {
-      position: relative;
+      position: absolute;
+      bottom: 1px;
+      right: 32px;
       top: auto;
-      right: auto;
-      grid-row: 1;
-      grid-column: 1;
-      align-self: start;
-      justify-self: end;
-      margin: 2px 32px 0 10px;
+      left: auto;
+      z-index: 4;
+      margin: 0;
       opacity: 0.66;
       pointer-events: auto;
       cursor: default;
@@ -359,20 +358,6 @@
       background: rgba(255, 255, 255, 0.15);
     }
 
-    @media (max-height: 42px) {
-      .show-meta .hushreader-reader {
-        grid-template-rows: minmax(0, 1fr);
-      }
-
-      .show-meta .hushreader-content {
-        grid-row: 1;
-      }
-
-      .show-meta .hushreader-meta {
-        display: none;
-      }
-    }
-
     .hushreader-reader {
       border: 0;
       background: var(--hushreader-bg-color);
@@ -385,8 +370,8 @@
     }
 
     .hushreader-meta {
-      background: rgba(0, 0, 0, 0.3);
-      color: var(--hushreader-text-color);
+      background: transparent;
+      color: var(--hushreader-text-color); 
     }
   </style>
 </head>
