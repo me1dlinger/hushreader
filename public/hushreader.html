@@ -215,12 +215,23 @@
       grid-template-rows: minmax(0, 1fr);
       min-width: 0;
       overflow: hidden;
-      cursor: grab;
       touch-action: none;
     }
 
     body.is-moving .hushreader-content {
       cursor: grabbing;
+    }
+
+    body.no-move .hushreader-content {
+      cursor: default;
+    }
+
+    body.no-move.is-moving .hushreader-content {
+      cursor: default;
+    }
+
+    body.no-resize .hushreader-resize-zone {
+      cursor: default;
     }
 
     .hushreader-lines {
@@ -371,7 +382,7 @@
 
     .hushreader-meta {
       background: transparent;
-      color: var(--hushreader-text-color); 
+      color: var(--hushreader-text-color);
     }
   </style>
 </head>
@@ -474,7 +485,7 @@
     function normalizeResizeSize(width, height) {
       return {
         width: clamp(snap(width, 10), getResizeLimit("minWidth", 280), getResizeLimit("maxWidth", 1180)),
-        height: clamp(snap(height, 2), getResizeLimit("minHeight", 22), getResizeLimit("maxHeight", 160))
+        height: clamp(snap(height, 2), getResizeLimit("minHeight", 22), getResizeLimit("maxHeight", 500))
       }
     }
 
@@ -713,6 +724,8 @@
         settings.showHushreaderMeta ? "show-meta" : "",
         isAutoHidden && visible && hideMode === 'hide-all' ? "is-auto-hidden" : "",
         isAutoHidden && visible && hideMode === 'show-progress' ? "is-auto-hidden-show-progress" : "",
+        !settings.windowMovable ? "no-move" : "",
+        settings.windowSizeLocked ? "no-resize" : "",
         visible ? "" : "is-hidden"
       ]
         .filter(Boolean)
@@ -871,6 +884,10 @@
     document.addEventListener("pointerdown", (event) => {
       const handle = event.target.closest("[data-resize]")
       if (handle) {
+        const isSizeLocked = Boolean(latestSettings.windowSizeLocked)
+
+        if (isSizeLocked) return
+
         event.preventDefault()
         event.stopPropagation()
 
@@ -893,6 +910,7 @@
 
       const moveHandle = event.target.closest("[data-move]")
       if (!moveHandle || resizeState || event.button !== 0) return
+      if (!latestSettings.windowMovable) return
 
       event.preventDefault()
       event.stopPropagation()
