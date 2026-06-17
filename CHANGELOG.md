@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.3.0](https://github.com/ZToolsCenter/ZTools-plugins) - 2026-06-17
+## [1.3.0](https://github.com/me1dlinger/hushreader/releases/tag/v1.3.0) - 2026-06-17
 
 ### Added
 - **MOBI 格式支持**：新增 MOBI 电子书格式的解析和阅读功能
@@ -17,7 +17,7 @@ All notable changes to this project will be documented in this file.
   - 开启"显示纯色封面"时清除数据库中的封面数据
   - dbStorage 中仅保留轻量数据：书籍列表（不含封面）、阅读进度、配置
 
-## [1.2.0](https://github.com/ZToolsCenter/ZTools-plugins) - 2026-06-16
+## [1.2.0](https://github.com/me1dlinger/hushreader/releases/tag/v1.2.0) - 2026-06-16
 
 ### Fixed
 - **移除大体积缓存，改为实时解析**：EPUB 封面和章节内容不再持久化到 dbStorage，改为每次需要时从文件实时解析，彻底解决存储空间溢出导致书籍丢失的问题
@@ -29,12 +29,12 @@ All notable changes to this project will be documented in this file.
 ### Added
 - **显示纯色封面选项**：其他设置中新增"显示纯色封面"开关，开启后 EPUB 不再解析封面图片，所有书籍使用纯色背景封面，节省性能消耗
 
-## [1.1.1](https://github.com/ZToolsCenter/ZTools-plugins) - 2026-06-16
+## [1.1.1](https://github.com/me1dlinger/hushreader/releases/tag/v1.1.1) - 2026-06-16
 
 ### Fixed
 - **窗口拖动/拉伸卡顿**：修复移动和拉伸阅读窗口时严重卡顿的问题——移动预览未做帧节流、预览期间重复调用 `setAlwaysOnTop`/`moveTop` 等重操作、提交时重复推送状态
 
-## [1.1.0](https://github.com/ZToolsCenter/ZTools-plugins) - 2026-06-16
+## [1.1.0](https://github.com/me1dlinger/hushreader/releases/tag/v1.1.0) - 2026-06-16
 
 ### Fixed
 - **设置编辑触发主窗口隐藏**：修复在设置界面编辑背景颜色输入框或快捷键时，每次输入/删除字符都会触发沉浸式阅读窗口 `show()`，导致主窗口被推到后面的问题
@@ -58,7 +58,7 @@ All notable changes to this project will be documented in this file.
 - **百分比进度编辑跳转**：百分比进度模式下，左键点击进度组件进入编辑模式，输入 0-100 数字后按 Enter 或点击外部区域跳转到对应进度，支持 ArrowUp/Down 微调（Shift 步进 10），Escape 取消
 - **书架"最近阅读"排序**：书架排序栏新增"最近阅读"选项，按最后阅读时间降序排列，未读过的书排在最后
 
-## [1.0.0](https://github.com/ZToolsCenter/ZTools-plugins) - 2026-06-16
+## [1.0.0](https://github.com/me1dlinger/hushreader/releases/tag/v1.0.0) - 2026-06-16
 
 ### Added
 - **隐阅盒阅读器插件**：隐阅盒阅读器插件初版实现

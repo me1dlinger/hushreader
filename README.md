@@ -173,11 +173,14 @@ HTML/纯文本判断 → 分章解析或按 TXT 逻辑处理
 ├── src/
 │   ├── App.vue                   # 根组件
 │   ├── main.ts                   # 应用入口
+│   ├── main.css                   # 应用样式
+│   ├── env.d.ts                   #环境变量类型定义
 │   ├── stores/
 │   │   ├── books.ts              # 书籍数据 + 持久化
 │   │   ├── config.ts             # 配置数据 + 持久化
 │   │   └── reader.ts             # 阅读器状态 + 分页
 │   ├── utils/
+│   │   ├── db.ts                 # 数据库操作工具
 │   │   ├── txtParser.ts          # TXT 解析 + 分页 + 预处理
 │   │   ├── epubParser.ts         # EPUB 解析
 │   │   └── mobiParser.ts         # MOBI 解析 + 加密检测 + 封面提取
