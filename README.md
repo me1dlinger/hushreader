@@ -20,10 +20,11 @@
 ## 截图
 
 <div align="center">
-  <img src="https://files.seeusercontent.com/2026/06/16/tr3Y/image_83.png" width="80%" />
-  <img src="https://files.seeusercontent.com/2026/06/16/zLc1/image_82.png" width="80%" />
-  <img src="https://files.seeusercontent.com/2026/06/16/4Uti/image_80.png" width="80%" />
-  <img src="https://files.seeusercontent.com/2026/06/16/fjG0/image_81.png" width="80%" />
+  <img src="https://files.seeusercontent.com/2026/06/17/qvX8/image_86.png" width="80%" />
+  <img src="https://files.seeusercontent.com/2026/06/17/lu4H/image_85.png" width="80%" />
+  <img src="https://files.seeusercontent.com/2026/06/17/eCu4/image_89.png" width="80%" />
+  <img src="https://files.seeusercontent.com/2026/06/17/0bqW/image_88.png" width="80%" />
+  <img src="https://files.seeusercontent.com/2026/06/17/y3uD/image_87.png" width="80%" />
 </div>
 
 ## 快速开始
