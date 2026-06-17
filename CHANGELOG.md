@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+
+## [1.3.0](https://github.com/ZToolsCenter/ZTools-plugins) - 2026-06-17
+
+### Added
+- **MOBI 格式支持**：新增 MOBI 电子书格式的解析和阅读功能
+- **MOBI 加密文件解密**：支持加密 MOBI 文件的解析和阅读
+
 ## [1.2.0](https://github.com/ZToolsCenter/ZTools-plugins) - 2026-06-16
 
 ### Fixed

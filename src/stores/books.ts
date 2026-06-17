@@ -5,7 +5,7 @@ export interface Book {
   id: string
   title: string
   author: string
-  format: 'epub' | 'txt'
+  format: 'epub' | 'txt' | 'mobi'
   filePath: string
   coverColor?: string
   coverImage?: string

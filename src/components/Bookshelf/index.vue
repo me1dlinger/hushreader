@@ -5,6 +5,7 @@ import { useConfigStore } from '../../stores/config'
 import { useReaderStore } from '../../stores/reader'
 import { parseTxt } from '../../utils/txtParser'
 import { parseEpub } from '../../utils/epubParser'
+import { parseMobi } from '../../utils/mobiParser'
 import SettingsModal from '../Settings/index.vue'
 import ContextMenu from './ContextMenu.vue'
 import BookCard from './BookCard.vue'
@@ -87,6 +88,15 @@ async function openChapterList(bookId: string) {
       const text = window.services?.readFile(book.filePath) ?? ''
       const chapters = parseTxt(text, configStore.config.other.chapterRegex || undefined)
       chapterListItems.value = chapters.map(c => ({ index: c.index, title: c.title }))
+    } else if (book.format === 'mobi') {
+      const content = window.services?.readFileBinary?.(book.filePath)
+      if (content) {
+        const blob = new Blob([content], { type: 'application/x-mobipocket-ebook' })
+        const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.mobi')
+        const result = await parseMobi(file)
+        if (result.error) { toast(`加载章节失败：${result.error}`, 'error'); showChapterList.value = false; return }
+        chapterListItems.value = result.chapters.map(c => ({ index: c.index, title: c.title }))
+      }
     } else {
       const content = window.services?.readFileBinary?.(book.filePath)
       if (content) {
@@ -270,14 +280,15 @@ async function importBook(filePath: string) {
   const name = filePath.split(/[\\/]/).pop() ?? ''
   const isEpub = /\.epub$/i.test(name)
   const isTxt = /\.txt$/i.test(name)
-  if (!isEpub && !isTxt) {
-    toast('仅支持 EPUB 和 TXT 格式', 'error')
+  const isMobi = /\.mobi$/i.test(name)
+  if (!isEpub && !isTxt && !isMobi) {
+    toast('仅支持 EPUB、TXT 和 MOBI 格式', 'error')
     return
   }
 
   isLoading.value = true
   try {
-    let title = name.replace(/\.(epub|txt)$/i, '')
+    let title = name.replace(/\.(epub|txt|mobi)$/i, '')
     let author = ''
     let coverColor = randomCoverColor()
     let coverImage: string | undefined
@@ -296,11 +307,27 @@ async function importBook(filePath: string) {
       } catch {}
     }
 
+    if (isMobi) {
+      try {
+        const content = window.services?.readFileBinary?.(filePath)
+        if (content) {
+          const blob = new Blob([content], { type: 'application/x-mobipocket-ebook' })
+          const file = new File([blob], name)
+          const result = await parseMobi(file)
+          if (result.error) { toast(`MOBI解析失败：${result.error}`, 'error'); return }
+          title = result.title || title
+          author = result.author || ''
+        }
+      } catch (e: any) {
+        toast(`MOBI导入失败：${e.message}`, 'error'); return
+      }
+    }
+
     const fileModifiedAt = window.services?.getFileModifiedTime?.(filePath)
 
     const book = bookStore.addBook({
       title, author,
-      format: isEpub ? 'epub' : 'txt',
+      format: isEpub ? 'epub' : isMobi ? 'mobi' : 'txt',
       filePath,
       coverColor,
       coverImage,
@@ -323,7 +350,7 @@ function handleAddBook() {
   const picker = window.ztools?.showOpenDialog({
     title: '选择书籍',
     buttonLabel: '导入',
-    filters: [{ name: '书籍文件', extensions: ['epub', 'txt'] }],
+    filters: [{ name: '书籍文件', extensions: ['epub', 'txt', 'mobi'] }],
     properties: ['openFile']
   })
 
@@ -485,7 +512,7 @@ const cfg = computed(() => configStore.config)
           <div v-else class="spinner"></div>
         </div>
         <span class="add-label">添加本地书籍</span>
-        <span class="add-sub">支持 EPUB / TXT</span>
+        <span class="add-sub">支持 EPUB / TXT / MOBI</span>
       </div>
 
       <!-- Book cards -->
