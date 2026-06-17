@@ -6,6 +6,7 @@ import { useReaderStore } from '../../stores/reader'
 import { parseTxt } from '../../utils/txtParser'
 import { parseEpub } from '../../utils/epubParser'
 import { parseMobi } from '../../utils/mobiParser'
+import { saveCover, loadCover, removeCover, saveCustomCover, loadCustomCover, removeCustomCover, removeBookData } from '../../utils/db'
 import SettingsModal from '../Settings/index.vue'
 import ContextMenu from './ContextMenu.vue'
 import BookCard from './BookCard.vue'
@@ -224,7 +225,9 @@ function openCoverPicker(bookId: string) {
     if (!file) return
     const reader = new FileReader()
     reader.onload = () => {
-      bookStore.updateBook(bookId, { customCoverImage: reader.result as string })
+      const data = reader.result as string
+      bookStore.updateBook(bookId, { customCoverImage: data })
+      saveCustomCover(bookId, data).catch(() => {})
       toast('封面已更新', 'success')
     }
     reader.readAsDataURL(file)
@@ -236,12 +239,14 @@ async function repairCover(bookId: string) {
   const book = bookStore.books.find(b => b.id === bookId)
   if (!book || book.format !== 'epub' || configStore.config.other.plainTextCover) {
     bookStore.updateBook(bookId, { coverImage: undefined })
+    removeCover(bookId).catch(() => {})
     return
   }
   try {
     const content = window.services?.readFileBinary?.(book.filePath)
     if (!content) {
       bookStore.updateBook(bookId, { coverImage: undefined })
+      removeCover(bookId).catch(() => {})
       return
     }
     const blob = new Blob([content], { type: 'application/epub+zip' })
@@ -249,11 +254,14 @@ async function repairCover(bookId: string) {
     const result = await parseEpub(file)
     if (result.coverUrl) {
       bookStore.updateBook(bookId, { coverImage: result.coverUrl })
+      saveCover(bookId, result.coverUrl).catch(() => {})
     } else {
       bookStore.updateBook(bookId, { coverImage: undefined })
+      removeCover(bookId).catch(() => {})
     }
   } catch {
     bookStore.updateBook(bookId, { coverImage: undefined })
+    removeCover(bookId).catch(() => {})
   }
 }
 
@@ -335,6 +343,7 @@ async function importBook(filePath: string) {
     })
 
     if (book) {
+      if (coverImage) saveCover(book.id, coverImage).catch(() => {})
       toast(`《${title}》已加入书架`, 'success')
     } else {
       toast('该书籍已在书架中', 'info')
@@ -407,6 +416,11 @@ async function resolveEpubCovers() {
   const epubBooks = bookStore.books.filter(b => b.format === 'epub' && !b.coverImage && !b.customCoverImage)
   for (const book of epubBooks) {
     try {
+      const cached = await loadCover(book.id)
+      if (cached) {
+        book.coverImage = cached
+        continue
+      }
       const content = window.services?.readFileBinary?.(book.filePath)
       if (!content) continue
       const blob = new Blob([content], { type: 'application/epub+zip' })
@@ -414,6 +428,7 @@ async function resolveEpubCovers() {
       const result = await parseEpub(file)
       if (result.coverUrl) {
         book.coverImage = result.coverUrl
+        saveCover(book.id, result.coverUrl).catch(() => {})
       }
     } catch {}
   }
@@ -423,12 +438,13 @@ watch(() => bookStore.books.length, () => {
   resolveEpubCovers()
 }, { immediate: true })
 
-watch(() => configStore.config.other.plainTextCover, (plain) => {
+watch(() => configStore.config.other.plainTextCover, async (plain) => {
   if (plain) {
-    bookStore.books.forEach(b => {
+    for (const b of bookStore.books) {
       b.coverImage = undefined
       b.customCoverImage = undefined
-    })
+    }
+    await Promise.allSettled(bookStore.books.map(b => removeBookData(b.id)))
   } else {
     resolveEpubCovers()
   }

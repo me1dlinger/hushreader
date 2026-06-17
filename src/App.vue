@@ -8,6 +8,7 @@ import { useConfigStore } from './stores/config'
 import { parseTxt } from './utils/txtParser'
 import { parseEpub } from './utils/epubParser'
 import { parseMobi } from './utils/mobiParser'
+import { loadChapters, saveChapters } from './utils/db'
 
 type HushreaderCommand = string | { type?: string; width?: number; height?: number; x?: number; y?: number; percent?: number }
 type HushreaderBounds = { x: number; y: number; width: number; height: number }
@@ -410,12 +411,18 @@ async function openBookAndHushreader(bookId: string) {
   readerStore.isLoading = true
 
   try {
-    const chapters = await parseBookAndGetChapters(book)
-    if (!chapters) return
+    let chapters = await loadChapters(bookId)
+    const currentModified = getFileModifiedTime(book.filePath)
+    const fileChanged = currentModified !== book.fileModifiedAt
+
+    if (!chapters || fileChanged) {
+      chapters = await parseBookAndGetChapters(book)
+      if (!chapters) return
+      saveChapters(bookId, chapters).catch(() => {})
+    }
 
     readerStore.setChapters(chapters)
 
-    const currentModified = getFileModifiedTime(book.filePath)
     if (currentModified !== book.fileModifiedAt) {
       bookStore.updateBook(bookId, { fileModifiedAt: currentModified })
     }

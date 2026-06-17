@@ -8,6 +8,14 @@ All notable changes to this project will be documented in this file.
 - **MOBI 格式支持**：新增 MOBI 电子书格式的解析和阅读功能
 - **MOBI 加密文件解密**：支持加密 MOBI 文件的解析和阅读
 
+### Changed
+- **封面和章节内容缓存迁移至 ztools.db 数据库**：封面和章节内容不再每次实时解析，改为存到 ztools.db 数据库，提升书架加载和打开书籍的速度
+  - 封面图（coverImage/customCoverImage）存入数据库文档 `cover_{bookId}` / `custom_cover_{bookId}`，书架加载时从数据库恢复
+  - 章节内容存入数据库文档 `chapters_{bookId}`，打开书籍时优先从数据库加载，文件修改后自动重新解析并更新缓存
+  - 删除书籍时同步清理数据库中对应的封面和章节文档
+  - 开启"显示纯色封面"时清除数据库中的封面数据
+  - dbStorage 中仅保留轻量数据：书籍列表（不含封面）、阅读进度、配置
+
 ## [1.2.0](https://github.com/ZToolsCenter/ZTools-plugins) - 2026-06-16
 
 ### Fixed
