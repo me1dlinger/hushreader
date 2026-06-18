@@ -10,6 +10,10 @@
 
 ***
 
+[更新日志](./CHANGELOG.md)
+
+***
+
 ## 功能一览
 
 | 阅读体验                | 个性化              | 书架管理              |
@@ -34,7 +38,8 @@
 
 ### 安装
 
-下载release文件，在ZTools中导入
+- 已上架市场，ZTools插件市场搜索**隐阅盒**，点击**安装**按钮
+- 下载github-release文件，在ZTools**搜索框**完成导入
 
 ### 开发
 
@@ -48,7 +53,7 @@ npm run build    # 构建生产版本
 
 在 ZTools 中输入以下关键词即可唤起：
 
-`yyh` · `摸鱼阅读` · `隐阅盒` · `书架` · `hushreader`
+`隐阅盒` · `hushreader` · `摸鱼阅读` ·  `书架` · `yyh`
 
 ## 技术细节
 
@@ -177,8 +182,8 @@ HTML/纯文本判断 → 分章解析或按 TXT 逻辑处理
 ├── src/
 │   ├── App.vue                   # 根组件
 │   ├── main.ts                   # 应用入口
-│   ├── main.css                   # 应用样式
-│   ├── env.d.ts                   #环境变量类型定义
+│   ├── main.css                  # 应用样式
+│   ├── env.d.ts                  # 环境变量类型定义
 │   ├── stores/
 │   │   ├── books.ts              # 书籍数据 + 持久化
 │   │   ├── config.ts             # 配置数据 + 持久化
@@ -192,17 +197,21 @@ HTML/纯文本判断 → 分章解析或按 TXT 逻辑处理
 │       ├── Bookshelf/            # 书架组件
 │       │   ├── index.vue
 │       │   ├── BookCard.vue
-│       │   ├── ContextMenu.vue
-│       │   ├── Modal.vue
-│       │   └── Toast.vue
+│       │   ├── BookInfoModal.vue # 书籍信息窗口
+│       │   ├── ContextMenu.vue   # 右键菜单
+│       │   ├── Modal.vue         # 通用弹窗
+│       │   ├── ThemeToggle.vue   # 主题切换
+│       │   └── Toast.vue         # Toast 提示
 │       └── Settings/             # 设置面板
 │           └── index.vue
 ├── .gitignore
+├── CHANGELOG.md                  # 更新日志
 ├── LICENSE
 ├── package.json
 ├── tsconfig.json
 ├── tsconfig.node.json
-└── vite.config.ts
+├── vite.config.ts
+└── ztools.api.md                 # ZTools API 文档
 ```
 
 ## 开源协议
