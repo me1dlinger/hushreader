@@ -6,7 +6,7 @@ import { useReaderStore } from '../../stores/reader'
 import { parseTxt } from '../../utils/txtParser'
 import { parseEpub } from '../../utils/epubParser'
 import { parseMobi } from '../../utils/mobiParser'
-import { saveCover, loadCover, removeCover, saveCustomCover, loadCustomCover, removeCustomCover, removeBookData } from '../../utils/db'
+import { saveCover, loadCover, removeCover, saveCustomCover, loadCustomCover, removeCustomCover, removeBookData, saveChapters, removeChapters } from '../../utils/db'
 import SettingsModal from '../Settings/index.vue'
 import ContextMenu from './ContextMenu.vue'
 import BookCard from './BookCard.vue'
@@ -266,6 +266,69 @@ async function repairCover(bookId: string) {
   }
 }
 
+async function restoreCover(bookId: string) {
+  const book = bookStore.books.find(b => b.id === bookId)
+  if (!book) return
+
+  bookStore.updateBook(bookId, { customCoverImage: undefined })
+  removeCustomCover(bookId).catch(() => {})
+
+  if (book.format === 'txt') {
+    bookStore.updateBook(bookId, { coverImage: undefined })
+    removeCover(bookId).catch(() => {})
+    toast('封面已恢复为纯色', 'success')
+    return
+  }
+
+  if (configStore.config.other.plainTextCover) {
+    bookStore.updateBook(bookId, { coverImage: undefined })
+    removeCover(bookId).catch(() => {})
+    toast('封面已恢复', 'success')
+    return
+  }
+
+  try {
+    const content = window.services?.readFileBinary?.(book.filePath)
+    if (!content) {
+      bookStore.updateBook(bookId, { coverImage: undefined })
+      removeCover(bookId).catch(() => {})
+      toast('封面已恢复', 'success')
+      return
+    }
+
+    let coverImage: string | undefined
+    if (book.format === 'epub') {
+      const blob = new Blob([content], { type: 'application/epub+zip' })
+      const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.epub')
+      const result = await parseEpub(file)
+      coverImage = result.coverUrl || undefined
+    } else if (book.format === 'mobi') {
+      const blob = new Blob([content], { type: 'application/x-mobipocket-ebook' })
+      const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.mobi')
+      const result = await parseMobi(file)
+      if (!result.error) coverImage = result.coverUrl || undefined
+    }
+
+    if (coverImage) {
+      bookStore.updateBook(bookId, { coverImage })
+      saveCover(bookId, coverImage).catch(() => {})
+    } else {
+      bookStore.updateBook(bookId, { coverImage: undefined })
+      removeCover(bookId).catch(() => {})
+    }
+    toast('封面已恢复', 'success')
+  } catch {
+    bookStore.updateBook(bookId, { coverImage: undefined })
+    removeCover(bookId).catch(() => {})
+    toast('封面已恢复', 'success')
+  }
+}
+
+function openRestoreCover(bookId: string) {
+  closeContextMenu()
+  restoreCover(bookId)
+}
+
 // Delete modal
 const showDeleteModal = ref(false)
 const deleteBookId = ref<string | null>(null)
@@ -281,6 +344,147 @@ function confirmDelete() {
   bookStore.removeBook(deleteBookId.value)
   showDeleteModal.value = false
   toast('已删除', 'info')
+}
+
+// Reload metadata
+async function reloadMetadata(bookId: string, silent = false) {
+  const book = bookStore.books.find(b => b.id === bookId)
+  if (!book) return
+
+  try {
+    let title = book.title
+    let author = book.author
+    let coverImage: string | undefined
+    let totalChapters: number | undefined
+
+    if (book.format === 'epub') {
+      const content = window.services?.readFileBinary?.(book.filePath)
+      if (content) {
+        const blob = new Blob([content], { type: 'application/epub+zip' })
+        const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.epub')
+        const result = await parseEpub(file)
+        title = result.title || title
+        author = result.author || author
+        totalChapters = result.chapters?.length
+        if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
+        if (result.chapters?.length) saveChapters(bookId, result.chapters).catch(() => {})
+      }
+    } else if (book.format === 'mobi') {
+      const content = window.services?.readFileBinary?.(book.filePath)
+      if (content) {
+        const blob = new Blob([content], { type: 'application/x-mobipocket-ebook' })
+        const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.mobi')
+        const result = await parseMobi(file)
+        if (!result.error) {
+          title = result.title || title
+          author = result.author || author
+          totalChapters = result.chapters?.length
+          if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
+          if (result.chapters?.length) saveChapters(bookId, result.chapters).catch(() => {})
+        }
+      }
+    } else {
+      const text = window.services?.readFile(book.filePath) ?? ''
+      const chapters = parseTxt(text, configStore.config.other.chapterRegex || undefined)
+      totalChapters = chapters.length
+      if (chapters.length) saveChapters(bookId, chapters).catch(() => {})
+    }
+
+    const fileModifiedAt = window.services?.getFileModifiedTime?.(book.filePath)
+    const updates: Partial<typeof book> = { title, author, totalChapters, fileModifiedAt, customCoverImage: undefined }
+
+    removeCustomCover(bookId).catch(() => {})
+
+    if (coverImage) {
+      updates.coverImage = coverImage
+      saveCover(bookId, coverImage).catch(() => {})
+    } else {
+      updates.coverImage = undefined
+      removeCover(bookId).catch(() => {})
+    }
+
+    bookStore.updateBook(bookId, updates)
+    if (!silent) toast(`《${title}》元数据已重载`, 'success')
+  } catch (e: any) {
+    if (!silent) toast(`重载失败：${e.message}`, 'error')
+    throw e
+  }
+}
+
+function openReloadMetadata(bookId: string) {
+  closeContextMenu()
+  reloadMetadata(bookId)
+}
+
+// Multi-select mode
+const selectionMode = ref(false)
+const selectedIds = ref<Set<string>>(new Set())
+
+function toggleSelectionMode() {
+  selectionMode.value = !selectionMode.value
+  if (!selectionMode.value) selectedIds.value.clear()
+  if (selectionMode.value) closeContextMenu()
+}
+
+function exitSelectionMode() {
+  selectionMode.value = false
+  selectedIds.value.clear()
+}
+
+function toggleBookSelect(bookId: string) {
+  if (selectedIds.value.has(bookId)) {
+    selectedIds.value.delete(bookId)
+  } else {
+    selectedIds.value.add(bookId)
+  }
+}
+
+function selectAllInCategory() {
+  const books = bookStore.filteredBooks
+  const allSelected = books.every(b => selectedIds.value.has(b.id))
+  if (allSelected) {
+    books.forEach(b => selectedIds.value.delete(b.id))
+  } else {
+    books.forEach(b => selectedIds.value.add(b.id))
+  }
+}
+
+const selectedCount = computed(() => selectedIds.value.size)
+
+// Batch operations
+const showBatchDeleteModal = ref(false)
+const batchReloading = ref(false)
+
+function openBatchDelete() {
+  if (selectedIds.value.size === 0) return
+  showBatchDeleteModal.value = true
+}
+
+function confirmBatchDelete() {
+  for (const id of selectedIds.value) {
+    bookStore.removeBook(id)
+  }
+  showBatchDeleteModal.value = false
+  toast(`已删除 ${selectedIds.value.size} 本书`, 'info')
+  exitSelectionMode()
+}
+
+async function batchReload() {
+  if (selectedIds.value.size === 0) return
+  batchReloading.value = true
+  let success = 0
+  let fail = 0
+  for (const id of selectedIds.value) {
+    try {
+      await reloadMetadata(id, true)
+      success++
+    } catch {
+      fail++
+    }
+  }
+  batchReloading.value = false
+  toast(`重载完成：${success} 成功${fail ? `，${fail} 失败` : ''}`, fail ? 'error' : 'success')
+  exitSelectionMode()
 }
 
 // Import book
@@ -625,6 +829,17 @@ const cfg = computed(() => configStore.config)
         />
       </div>
       <div class="shelf-actions">
+        <button
+          class="icon-btn"
+          :class="{ active: selectionMode }"
+          :title="selectionMode ? '退出多选' : '多选'"
+          @click="toggleSelectionMode"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline v-if="selectionMode" points="18 6 6 18"/><polyline v-if="selectionMode" points="6 6 18 18"/>
+            <template v-else><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></template>
+          </svg>
+        </button>
         <button class="icon-btn" title="关闭隐阅窗口" @click="handleHideHushreaderWindow">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
@@ -642,6 +857,12 @@ const cfg = computed(() => configStore.config)
 
     <!-- Category tabs -->
     <div class="category-bar">
+      <button
+        v-if="selectionMode"
+        class="category-tab select-all-btn"
+        :class="{ active: bookStore.filteredBooks.length > 0 && bookStore.filteredBooks.every(b => selectedIds.has(b.id)) }"
+        @click="selectAllInCategory"
+      >全选</button>
       <button
         v-for="cat in bookStore.categories"
         :key="cat"
@@ -693,7 +914,10 @@ const cfg = computed(() => configStore.config)
         :key="book.id"
         :book="book"
         :list-mode="cfg.other.listMode"
-        @click="openBookAndHushreader?.(book.id)"
+        :selection-mode="selectionMode"
+        :selected="selectedIds.has(book.id)"
+        @click="!selectionMode && openBookAndHushreader?.(book.id)"
+        @toggle-select="toggleBookSelect(book.id)"
         @contextmenu.prevent="onContextMenu(book.id, $event)"
         @cover-error="repairCover(book.id)"
       />
@@ -714,8 +938,10 @@ const cfg = computed(() => configStore.config)
       @chapter-list="openChapterList(contextMenuBook!)"
       @change-path="openPathModal(contextMenuBook!)"
       @edit-metadata="openMetadataModal(contextMenuBook!)"
+      @reload-metadata="openReloadMetadata(contextMenuBook!)"
       @set-category="openCategoryModal(contextMenuBook!)"
       @set-cover="openCoverPicker(contextMenuBook!)"
+      @restore-cover="openRestoreCover(contextMenuBook!)"
       @delete="openDeleteModal(contextMenuBook!)"
       @close="closeContextMenu"
     />
@@ -823,6 +1049,30 @@ const cfg = computed(() => configStore.config)
         <div class="form-actions">
           <button class="btn-secondary" @click="cancelDropImport">取消</button>
           <button class="btn-primary" @click="confirmDropImport">导入</button>
+        </div>
+      </div>
+    </Modal>
+
+    <!-- Batch action bar -->
+    <div v-if="selectionMode" class="batch-bar">
+      <span class="batch-info">已选 {{ selectedCount }} 本</span>
+      <div class="batch-actions">
+        <button class="btn-secondary" :disabled="selectedCount === 0 || batchReloading" @click="batchReload">
+          <span v-if="batchReloading" class="spinner" style="width:14px;height:14px;border-width:1.5px;margin-right:4px"></span>
+          批量重载
+        </button>
+        <button class="btn-danger" :disabled="selectedCount === 0" @click="openBatchDelete">批量删除</button>
+        <button class="btn-ghost" @click="exitSelectionMode">取消</button>
+      </div>
+    </div>
+
+    <!-- Batch Delete Confirm Modal -->
+    <Modal v-if="showBatchDeleteModal" title="批量删除" @close="showBatchDeleteModal = false">
+      <div class="form-modal">
+        <p style="margin: 0 0 16px; color: var(--c-ink)">确定从书架中删除选中的 {{ selectedCount }} 本书吗？本地文件不会被删除。</p>
+        <div class="form-actions">
+          <button class="btn-secondary" @click="showBatchDeleteModal = false">取消</button>
+          <button class="btn-danger" @click="confirmBatchDelete">删除</button>
         </div>
       </div>
     </Modal>
@@ -1239,6 +1489,77 @@ const cfg = computed(() => configStore.config)
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.batch-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--c-surface-overlay);
+  border-top: 1px solid var(--c-border);
+  box-shadow: var(--shadow-xl);
+  animation: slide-up 0.15s var(--ease-out);
+}
+
+.batch-info {
+  font-size: 13px;
+  color: var(--c-ink-secondary);
+  font-weight: 500;
+}
+
+.batch-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.batch-actions .btn-secondary,
+.batch-actions .btn-danger {
+  display: flex;
+  align-items: center;
+  padding: 7px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s var(--ease-out);
+}
+
+.batch-actions .btn-secondary {
+  background: var(--c-surface-sunken);
+  color: var(--c-ink);
+}
+.batch-actions .btn-secondary:hover:not(:disabled) { background: var(--c-border); }
+.batch-actions .btn-danger {
+  background: var(--c-danger);
+  color: var(--c-ink-inverse);
+}
+.batch-actions .btn-danger:hover:not(:disabled) { opacity: 0.85; }
+.batch-actions .btn-secondary:disabled,
+.batch-actions .btn-danger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.batch-actions .btn-ghost {
+  color: var(--c-ink-tertiary);
+  font-size: 13px;
+  padding: 7px 12px;
+}
+.batch-actions .btn-ghost:hover { color: var(--c-ink); }
+
+.select-all-btn {
+  font-weight: 600;
+}
+
+.icon-btn.active {
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
 }
 
 .theme-toggle-fab {
