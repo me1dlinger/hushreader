@@ -12,6 +12,7 @@ import ContextMenu from './ContextMenu.vue'
 import BookCard from './BookCard.vue'
 import Toast from './Toast.vue'
 import Modal from './Modal.vue'
+import BookInfoModal from './BookInfoModal.vue'
 import ThemeToggle from './ThemeToggle.vue'
 
 const props = defineProps<{ enterAction?: any }>()
@@ -209,7 +210,8 @@ function confirmMetadata() {
   if (!metadataModalBookId.value) return
   bookStore.updateBook(metadataModalBookId.value, {
     title: metadataModalTitle.value.trim() || '未命名',
-    author: metadataModalAuthor.value.trim()
+    author: metadataModalAuthor.value.trim(),
+    updatedAt: Date.now()
   })
   showMetadataModal.value = false
   toast('元数据已更新', 'success')
@@ -227,7 +229,7 @@ function openCoverPicker(bookId: string) {
     const reader = new FileReader()
     reader.onload = () => {
       const data = reader.result as string
-      bookStore.updateBook(bookId, { customCoverImage: data })
+      bookStore.updateBook(bookId, { customCoverImage: data, updatedAt: Date.now() })
       saveCustomCover(bookId, data).catch(() => {})
       toast('封面已更新', 'success')
     }
@@ -333,6 +335,22 @@ function openRestoreCover(bookId: string) {
 const showDeleteModal = ref(false)
 const deleteBookId = ref<string | null>(null)
 
+// Book info modal
+const showBookInfo = ref(false)
+const bookInfoId = ref<string | null>(null)
+
+function openBookInfo(bookId: string) {
+  closeContextMenu()
+  bookInfoId.value = bookId
+  showBookInfo.value = true
+}
+
+function onBookInfoSaved(updates: Partial<typeof bookStore.books[0]>) {
+  if (!bookInfoId.value) return
+  bookStore.updateBook(bookInfoId.value, updates)
+  toast('信息已更新', 'success')
+}
+
 function openDeleteModal(bookId: string) {
   closeContextMenu()
   deleteBookId.value = bookId
@@ -354,6 +372,7 @@ async function reloadMetadata(bookId: string, silent = false) {
   try {
     let title = book.title
     let author = book.author
+    let description = book.description || ''
     let coverImage: string | undefined
     let totalChapters: number | undefined
 
@@ -365,6 +384,7 @@ async function reloadMetadata(bookId: string, silent = false) {
         const result = await parseEpub(file)
         title = result.title || title
         author = result.author || author
+        description = result.description || description
         totalChapters = result.chapters?.length
         if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
         if (result.chapters?.length) saveChapters(bookId, result.chapters).catch(() => {})
@@ -378,6 +398,7 @@ async function reloadMetadata(bookId: string, silent = false) {
         if (!result.error) {
           title = result.title || title
           author = result.author || author
+          description = result.description || description
           totalChapters = result.chapters?.length
           if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
           if (result.chapters?.length) saveChapters(bookId, result.chapters).catch(() => {})
@@ -391,7 +412,7 @@ async function reloadMetadata(bookId: string, silent = false) {
     }
 
     const fileModifiedAt = window.services?.getFileModifiedTime?.(book.filePath)
-    const updates: Partial<typeof book> = { title, author, totalChapters, fileModifiedAt, customCoverImage: undefined }
+    const updates: Partial<typeof book> = { title, author, description: description || undefined, totalChapters, fileModifiedAt, customCoverImage: undefined }
 
     removeCustomCover(bookId).catch(() => {})
 
@@ -503,6 +524,7 @@ async function importBook(filePath: string) {
   try {
     let title = name.replace(/\.(epub|txt|mobi)$/i, '')
     let author = ''
+    let description = ''
     let coverColor = randomCoverColor()
     let coverImage: string | undefined
 
@@ -515,6 +537,7 @@ async function importBook(filePath: string) {
           const result = await parseEpub(file)
           title = result.title || title
           author = result.author || ''
+          description = result.description || ''
           if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
         }
       } catch {}
@@ -530,6 +553,7 @@ async function importBook(filePath: string) {
           if (result.error) { toast(`MOBI解析失败：${result.error}`, 'error'); return }
           title = result.title || title
           author = result.author || ''
+          description = result.description || ''
           if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
         }
       } catch (e: any) {
@@ -540,7 +564,7 @@ async function importBook(filePath: string) {
     const fileModifiedAt = window.services?.getFileModifiedTime?.(filePath)
 
     const book = bookStore.addBook({
-      title, author,
+      title, author, description: description || undefined,
       format: isEpub ? 'epub' : isMobi ? 'mobi' : 'txt',
       filePath,
       coverColor,
@@ -575,6 +599,7 @@ async function importDroppedFile(file: File) {
   try {
     let title = name.replace(/\.(epub|txt|mobi)$/i, '')
     let author = ''
+    let description = ''
     let coverColor = randomCoverColor()
     let coverImage: string | undefined
 
@@ -583,6 +608,7 @@ async function importDroppedFile(file: File) {
         const result = await parseEpub(file)
         title = result.title || title
         author = result.author || ''
+        description = result.description || ''
         if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
       } catch {}
     }
@@ -593,6 +619,7 @@ async function importDroppedFile(file: File) {
         if (result.error) { toast(`MOBI解析失败：${result.error}`, 'error'); return }
         title = result.title || title
         author = result.author || ''
+        description = result.description || ''
         if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
       } catch (e: any) {
         toast(`MOBI导入失败：${e.message}`, 'error'); return
@@ -600,7 +627,7 @@ async function importDroppedFile(file: File) {
     }
 
     const book = bookStore.addBook({
-      title, author,
+      title, author, description: description || undefined,
       format: isEpub ? 'epub' : isMobi ? 'mobi' : 'txt',
       filePath: (file as any).path || name,
       coverColor,
@@ -803,6 +830,9 @@ watch(() => configStore.config.other.plainTextCover, async (plain) => {
   }
 })
 
+
+
+
 const cfg = computed(() => configStore.config)
 </script>
 
@@ -813,7 +843,7 @@ const cfg = computed(() => configStore.config)
       <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
       </svg>
-      <span>释放以导入书籍</span>
+      <span>导入书籍</span>
     </div>
     <!-- Header -->
     <header class="shelf-header">
@@ -935,6 +965,7 @@ const cfg = computed(() => configStore.config)
     <ContextMenu
       v-if="contextMenuBook"
       :pos="contextMenuPos"
+      @book-info="openBookInfo(contextMenuBook!)"
       @chapter-list="openChapterList(contextMenuBook!)"
       @change-path="openPathModal(contextMenuBook!)"
       @edit-metadata="openMetadataModal(contextMenuBook!)"
@@ -1076,6 +1107,14 @@ const cfg = computed(() => configStore.config)
         </div>
       </div>
     </Modal>
+
+    <!-- Book Info Modal -->
+    <BookInfoModal
+      v-if="showBookInfo && bookInfoId"
+      :book="bookStore.books.find(b => b.id === bookInfoId)!"
+      @close="showBookInfo = false"
+      @saved="onBookInfoSaved"
+    />
 
     <!-- Toast -->
     <Toast :message="toastMsg" :type="toastType" />

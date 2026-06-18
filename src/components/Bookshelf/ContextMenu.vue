@@ -3,6 +3,7 @@ import { ref, nextTick, watch } from 'vue'
 
 const props = defineProps<{ pos: { x: number; y: number } }>()
 const emit = defineEmits<{
+  'book-info': []
   'chapter-list': []
   'change-path': []
   'edit-metadata': []
@@ -41,6 +42,10 @@ watch(
 <template>
   <div class="ctx-backdrop" @click.self="emit('close')" @contextmenu.prevent>
     <ul ref="menuRef" class="ctx-menu" :style="style" @click.stop>
+      <li class="ctx-item" @click="emit('book-info')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        书籍信息
+      </li>
       <li class="ctx-item" @click="emit('chapter-list')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
         章节列表
