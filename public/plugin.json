@@ -17,11 +17,11 @@
       "explain": "打开书架",
       "icon": "logo.png",
       "cmds": [
-        "yyh",
-        "摸鱼阅读",
         "隐阅盒",
         "书架",
-        "hushreader"
+        "摸鱼阅读",
+        "hushreader",
+        "yyh"
       ]
     },
     {
