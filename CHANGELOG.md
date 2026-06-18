@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - **拖拽导入书籍**：将书籍文件拖入书架界面时，显示拖拽悬停覆盖层提示"释放以导入书籍"，释放后弹出确认弹窗列出待导入文件，确认后解析书籍并保存元数据，取消则放弃导入
-
+- **快捷文件导入**：支持通过 `hushreader-import` 命令从 ztools 快捷导入书籍文件，`onPluginEnter` 触发时自动解析并添加到书架
 
 ## [1.3.1](https://github.com/me1dlinger/hushreader/releases/tag/v1.3.1) - 2026-06-17
 
