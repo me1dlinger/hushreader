@@ -31,6 +31,25 @@
       "cmds": [
         "开始阅读"
       ]
+    },
+    {
+      "code": "hushreader-import",
+      "explain": "导入本地书籍",
+      "icon": "logo.png",
+      "cmds": [
+        "导入书籍",
+        {
+          "type": "files",
+          "fileType": "file",
+          "extensions": [
+            "txt",
+            "epub",
+            "mobi"
+          ],
+          "maxLength": 1,
+          "label": "导入到 隐阅盒"
+        }
+      ]
     }
   ],
   "platform": [

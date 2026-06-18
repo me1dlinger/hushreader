@@ -428,12 +428,15 @@ function handleAddBook() {
 }
 
 // Handle plugin enter with file import
-onMounted(() => {
-  if (props.enterAction?.code === 'import' && props.enterAction?.type === 'files') {
-    const filePath = props.enterAction?.payload?.[0]?.path
-    if (filePath) importBook(filePath)
+watch(() => props.enterAction, async (action) => {
+  if (action?.code === 'hushreader-import' && action?.type === 'files') {
+    const filePath = (action.payload as { path?: string }[] | undefined)?.[0]?.path
+    if (filePath) {
+      await bookStore.load()
+      importBook(filePath)
+    }
   }
-})
+}, { immediate: true })
 
 // Drag and drop import
 const fileHovering = ref(false)

@@ -624,9 +624,9 @@ watch(
   }
 )
 
-onMounted(() => {
-  configStore.load()
-  bookStore.load()
+onMounted(async () => {
+  await configStore.load()
+  await bookStore.load()
   ;(window as any).ztools?.onPluginEnter?.((action: any) => {
     route.value = action.code
     enterAction.value = action
