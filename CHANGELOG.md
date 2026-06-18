@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.2](https://github.com/me1dlinger/hushreader/releases/tag/v1.3.2) - 2026-06-18
+
+### Added
+- **拖拽导入书籍**：将书籍文件拖入书架界面时，显示拖拽悬停覆盖层提示"释放以导入书籍"，释放后弹出确认弹窗列出待导入文件，确认后解析书籍并保存元数据，取消则放弃导入
+
+
 ## [1.3.1](https://github.com/me1dlinger/hushreader/releases/tag/v1.3.1) - 2026-06-17
 
 ### Added

@@ -1,6 +1,8 @@
 <div align="center">
 
-# 隐阅盒 · HushReader
+![HushReader Logo](public/logo.png)
+
+# [隐阅盒 · HushReader](https://github.com/me1dlinger/hushreader)
 
 适配 [ZTools](https://github.com/ZToolsCenter/ZTools) 的阅读插件，支持 TXT / EPUB / MOBI 格式
 

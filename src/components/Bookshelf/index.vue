@@ -357,6 +357,65 @@ async function importBook(filePath: string) {
   }
 }
 
+async function importDroppedFile(file: File) {
+  const name = file.name
+  const isEpub = /\.epub$/i.test(name)
+  const isTxt = /\.txt$/i.test(name)
+  const isMobi = /\.mobi$/i.test(name)
+  if (!isEpub && !isTxt && !isMobi) {
+    toast('仅支持 EPUB、TXT 和 MOBI 格式', 'error')
+    return
+  }
+
+  isLoading.value = true
+  try {
+    let title = name.replace(/\.(epub|txt|mobi)$/i, '')
+    let author = ''
+    let coverColor = randomCoverColor()
+    let coverImage: string | undefined
+
+    if (isEpub) {
+      try {
+        const result = await parseEpub(file)
+        title = result.title || title
+        author = result.author || ''
+        if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
+      } catch {}
+    }
+
+    if (isMobi) {
+      try {
+        const result = await parseMobi(file)
+        if (result.error) { toast(`MOBI解析失败：${result.error}`, 'error'); return }
+        title = result.title || title
+        author = result.author || ''
+        if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
+      } catch (e: any) {
+        toast(`MOBI导入失败：${e.message}`, 'error'); return
+      }
+    }
+
+    const book = bookStore.addBook({
+      title, author,
+      format: isEpub ? 'epub' : isMobi ? 'mobi' : 'txt',
+      filePath: (file as any).path || name,
+      coverColor,
+      coverImage
+    })
+
+    if (book) {
+      if (coverImage) saveCover(book.id, coverImage).catch(() => {})
+      toast(`《${title}》已加入书架`, 'success')
+    } else {
+      toast('该书籍已在书架中', 'info')
+    }
+  } catch (error: any) {
+    toast(`导入失败: ${error.message || error}`, 'error')
+  } finally {
+    isLoading.value = false
+  }
+}
+
 function handleAddBook() {
   const picker = window.ztools?.showOpenDialog({
     title: '选择书籍',
@@ -377,18 +436,78 @@ onMounted(() => {
 })
 
 // Drag and drop import
-function onDrop(e: DragEvent) {
-  e.preventDefault()
-  const files = e.dataTransfer?.files
-  if (!files?.length) return
-  const file = files[0]
-  // In Electron context the path is available
-  const filePath = (file as any).path
-  if (filePath) importBook(filePath)
+const fileHovering = ref(false)
+let hoverNestLevel = 0
+const showDropConfirmModal = ref(false)
+const pendingDropFiles = ref<File[]>([])
+
+function hasFilePayload(ev: DragEvent) {
+  return Array.from(ev.dataTransfer?.types ?? []).includes('Files')
 }
 
-function onDragover(e: DragEvent) {
-  e.preventDefault()
+function markDropCopy(ev: DragEvent) {
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy'
+}
+
+function cursorInsideBounds(ev: DragEvent) {
+  const el = ev.currentTarget
+  if (!(el instanceof HTMLElement)) return false
+  const r = el.getBoundingClientRect()
+  return ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom
+}
+
+function onDragEnter(ev: DragEvent) {
+  if (!hasFilePayload(ev)) return
+  hoverNestLevel += 1
+  markDropCopy(ev)
+  fileHovering.value = true
+}
+
+function onDragover(ev: DragEvent) {
+  if (!hasFilePayload(ev)) return
+  ev.preventDefault()
+  markDropCopy(ev)
+  fileHovering.value = true
+}
+
+function onDragLeave(ev: DragEvent) {
+  if (!fileHovering.value) return
+  hoverNestLevel = Math.max(0, hoverNestLevel - 1)
+  if (hoverNestLevel > 0 && cursorInsideBounds(ev)) return
+  hoverNestLevel = 0
+  fileHovering.value = false
+}
+
+function onDrop(ev: DragEvent) {
+  ev.preventDefault()
+  hoverNestLevel = 0
+  fileHovering.value = false
+  const files = ev.dataTransfer?.files
+  if (!files?.length) return
+  const validExts = /\.(epub|txt|mobi)$/i
+  const valid: File[] = []
+  for (let i = 0; i < files.length; i++) {
+    if (validExts.test(files[i].name)) valid.push(files[i])
+  }
+  if (!valid.length) {
+    toast('仅支持 EPUB、TXT 和 MOBI 格式', 'error')
+    return
+  }
+  pendingDropFiles.value = valid
+  showDropConfirmModal.value = true
+}
+
+async function confirmDropImport() {
+  showDropConfirmModal.value = false
+  for (const f of pendingDropFiles.value) {
+    await importDroppedFile(f)
+  }
+  pendingDropFiles.value = []
+}
+
+function cancelDropImport() {
+  showDropConfirmModal.value = false
+  pendingDropFiles.value = []
 }
 
 // Close context menu on outside click
@@ -481,7 +600,14 @@ const cfg = computed(() => configStore.config)
 </script>
 
 <template>
-  <div class="bookshelf" @drop="onDrop" @dragover="onDragover">
+  <div class="bookshelf" @dragenter="onDragEnter" @dragover="onDragover" @dragleave="onDragLeave" @drop="onDrop">
+    <!-- Drop overlay -->
+    <div v-if="fileHovering" class="drop-overlay">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <span>释放以导入书籍</span>
+    </div>
     <!-- Header -->
     <header class="shelf-header">
       <h1 class="shelf-title">书架</h1>
@@ -679,6 +805,25 @@ const cfg = computed(() => configStore.config)
       </div>
     </Modal>
 
+    <!-- Drop Confirm Modal -->
+    <Modal v-if="showDropConfirmModal" title="导入书籍" @close="cancelDropImport">
+      <div class="form-modal">
+        <p style="margin: 0 0 8px; color: var(--c-ink)">检测到拖入的书籍文件，是否导入到书架？</p>
+        <div class="drop-file-list">
+          <div v-for="(f, i) in pendingDropFiles" :key="i" class="drop-file-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            </svg>
+            <span>{{ f.name }}</span>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn-secondary" @click="cancelDropImport">取消</button>
+          <button class="btn-primary" @click="confirmDropImport">导入</button>
+        </div>
+      </div>
+    </Modal>
+
     <!-- Toast -->
     <Toast :message="toastMsg" :type="toastType" />
 
@@ -697,6 +842,25 @@ const cfg = computed(() => configStore.config)
   background: var(--c-surface);
   color: var(--c-ink);
   overflow: hidden;
+  position: relative;
+}
+
+.drop-overlay {
+  position: absolute;
+  inset: 10px;
+  z-index: 20;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  border: 1px dashed var(--c-accent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--c-surface) 86%, transparent);
+  color: var(--c-accent);
+  font-weight: 800;
+  font-size: 14px;
+  backdrop-filter: blur(18px);
 }
 
 .shelf-header {
@@ -1042,6 +1206,37 @@ const cfg = computed(() => configStore.config)
   color: var(--c-ink-inverse);
 }
 .btn-danger:hover { opacity: 0.85; }
+
+.drop-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 12px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.drop-file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--c-surface-sunken);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--c-ink-secondary);
+}
+
+.drop-file-item svg {
+  flex-shrink: 0;
+  color: var(--c-accent);
+}
+
+.drop-file-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .theme-toggle-fab {
   position: fixed;
