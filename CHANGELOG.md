@@ -1,6 +1,15 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [1.3.3](https://github.com/me1dlinger/hushreader/releases/tag/v1.3.3) - 2026-06-19
+
+### Added
+- **自动检测系统深浅色模式**：在插件加载时，根据系统深浅色模式自动切换主题，支持手动切换主题
+- **资源管理器打开文件位置**：在书籍右键菜单新增"打开文件位置"选项，使用ztools.shellShowItemInFolder()
+- **隐阅定时器**：新增设置项，打开定时器后可设置一个时长，隐阅时间到达之后自动关闭隐阅窗口并Toast提示用户
+- **备份和恢复所有阅读进度与配置**：备份和恢复所有阅读进度与配置。插件设置导出，所有书籍的元数据导出。实现设置导入，书籍数据导入
+- **多配置切换**：实现多配置切换、添加和删除(最少保留一个配置)，导入的配置自动添加为新配置
+
 
 ## [1.3.2](https://github.com/me1dlinger/hushreader/releases/tag/v1.3.2) - 2026-06-18
 
