@@ -289,7 +289,6 @@ function ensureHushreaderWindow(options?: { skipShow?: boolean }) {
       hasShadow: false,
       focusable: true,
       acceptFirstMouse: true,
-      alwayOnTop: true,
       alwaysOnTop: true,
       webPreferences: {
         devTools: false,
