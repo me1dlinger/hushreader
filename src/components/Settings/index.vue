@@ -2,11 +2,23 @@
 import { ref, computed, watch } from 'vue'
 import { useConfigStore, type ReaderConfig } from '../../stores/config'
 import { useBookStore } from '../../stores/books'
+import Toast from '../Bookshelf/Toast.vue'
 
 const emit = defineEmits<{ close: [] }>()
 
 const configStore = useConfigStore()
 const cfg = computed(() => configStore.config)
+
+const toastMessage = ref('')
+const toastType = ref<'info' | 'success' | 'error'>('info')
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function showToast(msg: string, type: 'info' | 'success' | 'error' = 'info') {
+  if (toastTimer) clearTimeout(toastTimer)
+  toastMessage.value = msg
+  toastType.value = type
+  toastTimer = setTimeout(() => { toastMessage.value = '' }, 2500)
+}
 
 const activeTab = ref<'hushreader' | 'function' | 'other'>('hushreader')
 
@@ -69,34 +81,31 @@ function removeCustomFont(fontName: string) {
 
 const bookStore = useBookStore()
 
-const isExporting = ref(false)
-const isImporting = ref(false)
+const isExportingConfig = ref(false)
+const isImportingConfig = ref(false)
+const isExportingBooks = ref(false)
+const isImportingBooks = ref(false)
 const isAddingConfig = ref(false)
 const newConfigName = ref('')
 const renamingConfigIndex = ref(-1)
 const renameInput = ref('')
 
-async function exportData() {
-  isExporting.value = true
+async function exportConfig() {
+  isExportingConfig.value = true
   try {
-    const booksData = bookStore.books.map(b => {
-      const { coverImage, customCoverImage, ...rest } = b
-      return rest
-    })
     const configData = JSON.parse(JSON.stringify(configStore.config))
     const exportObj = {
-      _hushreaderBackup: true,
+      _hushreaderConfigBackup: true,
       version: 1,
       exportedAt: new Date().toISOString(),
-      books: booksData,
       config: configData
     }
     const json = JSON.stringify(exportObj, null, 2)
     const ztools = (window as any).ztools
     if (ztools?.showSaveDialog) {
       const filePath = ztools.showSaveDialog({
-        title: '导出 HushReader 数据',
-        defaultPath: `hushreader-backup-${new Date().toISOString().slice(0, 10)}.json`,
+        title: '导出 HushReader 配置',
+        defaultPath: `hushreader-config-${new Date().toISOString().slice(0, 10)}.json`,
         filters: [{ name: 'JSON', extensions: ['json'] }]
       })
       if (filePath) {
@@ -107,30 +116,32 @@ async function exportData() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `hushreader-backup-${new Date().toISOString().slice(0, 10)}.json`
+      a.download = `hushreader-config-${new Date().toISOString().slice(0, 10)}.json`
       a.click()
       URL.revokeObjectURL(url)
     }
+    showToast('配置导出成功', 'success')
   } catch (e) {
-    console.warn('Export failed', e)
+    console.warn('Export config failed', e)
+    showToast('配置导出失败', 'error')
   } finally {
-    isExporting.value = false
+    isExportingConfig.value = false
   }
 }
 
-async function importData() {
-  isImporting.value = true
+async function importConfig() {
+  isImportingConfig.value = true
   try {
     const ztools = (window as any).ztools
     let json = ''
     if (ztools?.showOpenDialog) {
       const filePaths = ztools.showOpenDialog({
-        title: '导入 HushReader 数据',
+        title: '导入 HushReader 配置',
         filters: [{ name: 'JSON', extensions: ['json'] }],
         properties: ['openFile']
       })
       if (!filePaths || !filePaths.length) {
-        isImporting.value = false
+        isImportingConfig.value = false
         return
       }
       json = window.services.readFileFromPath(filePaths[0])
@@ -143,40 +154,149 @@ async function importData() {
         input.click()
       })
       if (!file) {
-        isImporting.value = false
+        isImportingConfig.value = false
         return
       }
       json = await file.text()
     }
     if (!json) {
-      isImporting.value = false
+      isImportingConfig.value = false
       return
     }
     const data = JSON.parse(json)
-    if (!data._hushreaderBackup) {
-      alert('无效的 HushReader 备份文件')
-      isImporting.value = false
+    if (!data._hushreaderConfigBackup) {
+      showToast('无效的 HushReader 配置备份文件', 'error')
+      isImportingConfig.value = false
       return
     }
     if (data.config) {
-      configStore.config = deepMerge(structuredClone(configStore.config), data.config)
+      const configName = data.config.other?.configName || `导入配置 ${configStore.configList.length + 1}`
+      configStore.addConfig(configName)
+      configStore.config = deepMerge(JSON.parse(JSON.stringify(configStore.DEFAULT_CONFIG)), data.config)
+      configStore.config.other.configName = configName
+      configStore.save()
+      showToast(`配置「${configName}」导入成功`, 'success')
+    } else {
+      showToast('备份文件中未找到配置数据', 'error')
+    }
+  } catch (e) {
+    console.warn('Import config failed', e)
+    showToast('配置导入失败', 'error')
+  } finally {
+    isImportingConfig.value = false
+  }
+}
+
+async function exportBooks() {
+  isExportingBooks.value = true
+  try {
+    const booksData = bookStore.books.map(b => {
+      const { coverImage, customCoverImage, ...rest } = b
+      return rest
+    })
+    const exportObj = {
+      _hushreaderBooksBackup: true,
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      books: booksData
+    }
+    const json = JSON.stringify(exportObj, null, 2)
+    const ztools = (window as any).ztools
+    if (ztools?.showSaveDialog) {
+      const filePath = ztools.showSaveDialog({
+        title: '导出 HushReader 书籍',
+        defaultPath: `hushreader-books-${new Date().toISOString().slice(0, 10)}.json`,
+        filters: [{ name: 'JSON', extensions: ['json'] }]
+      })
+      if (filePath) {
+        window.services.writeFileToPath(filePath, json)
+      }
+    } else {
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `hushreader-books-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    }
+    showToast(`成功导出 ${booksData.length} 本书`, 'success')
+  } catch (e) {
+    console.warn('Export books failed', e)
+    showToast('书籍导出失败', 'error')
+  } finally {
+    isExportingBooks.value = false
+  }
+}
+
+async function importBooks() {
+  isImportingBooks.value = true
+  try {
+    const ztools = (window as any).ztools
+    let json = ''
+    if (ztools?.showOpenDialog) {
+      const filePaths = ztools.showOpenDialog({
+        title: '导入 HushReader 书籍',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+        properties: ['openFile']
+      })
+      if (!filePaths || !filePaths.length) {
+        isImportingBooks.value = false
+        return
+      }
+      json = window.services.readFileFromPath(filePaths[0])
+    } else {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = '.json'
+      const file = await new Promise<File | null>(resolve => {
+        input.onchange = () => resolve(input.files?.[0] ?? null)
+        input.click()
+      })
+      if (!file) {
+        isImportingBooks.value = false
+        return
+      }
+      json = await file.text()
+    }
+    if (!json) {
+      isImportingBooks.value = false
+      return
+    }
+    const data = JSON.parse(json)
+    if (!data._hushreaderBooksBackup) {
+      showToast('无效的 HushReader 书籍备份文件', 'error')
+      isImportingBooks.value = false
+      return
     }
     if (Array.isArray(data.books)) {
+      let added = 0
+      let skipped = 0
       for (const book of data.books) {
-        const existing = bookStore.books.find(b => b.filePath === book.filePath)
-        if (existing) {
-          bookStore.updateBook(existing.id, book)
-        } else {
-          bookStore.addBook(book)
+        if (bookStore.books.some(b => b.filePath === book.filePath)) {
+          skipped++
+          continue
         }
+        bookStore.addBook(book)
+        added++
       }
+      bookStore.save()
+      if (added > 0) {
+        const msg = skipped > 0
+          ? `成功导入 ${added} 本书，跳过 ${skipped} 本重复`
+          : `成功导入 ${added} 本书`
+        showToast(msg, 'success')
+      } else {
+        showToast(skipped > 0 ? `所有 ${skipped} 本书均已存在，无新增` : '备份文件中未找到书籍数据', 'info')
+      }
+    } else {
+      showToast('备份文件中未找到书籍数据', 'error')
     }
-    configStore.save()
-    bookStore.save()
   } catch (e) {
-    console.warn('Import failed', e)
+    console.warn('Import books failed', e)
+    showToast('书籍导入失败', 'error')
   } finally {
-    isImporting.value = false
+    isImportingBooks.value = false
   }
 }
 
@@ -682,22 +802,42 @@ function commitCapture(targetArr: string[]) {
           <div class="section-label">备份与恢复</div>
 
           <div class="setting-row">
-            <label>导出数据</label>
-            <button class="btn-secondary" :disabled="isExporting" @click="exportData"
+            <label>导出配置</label>
+            <button class="btn-secondary" :disabled="isExportingConfig" @click="exportConfig"
               style="padding: 5px 14px; font-size: 12px">
-              {{ isExporting ? '导出中...' : '导出书籍和设置' }}
+              {{ isExportingConfig ? '导出中...' : '导出配置' }}
             </button>
           </div>
-          <p class="hint" style="margin: -2px 0 6px; padding-left: 0">将所有书籍信息和插件设置导出为 JSON 文件（不含封面图片）</p>
+          <p class="hint" style="margin: -2px 0 6px; padding-left: 0">将当前插件设置导出为 JSON 文件</p>
 
           <div class="setting-row">
-            <label>导入数据</label>
-            <button class="btn-secondary" :disabled="isImporting" @click="importData"
+            <label>导入配置</label>
+            <button class="btn-secondary" :disabled="isImportingConfig" @click="importConfig"
               style="padding: 5px 14px; font-size: 12px">
-              {{ isImporting ? '导入中...' : '导入书籍和设置' }}
+              {{ isImportingConfig ? '导入中...' : '导入配置' }}
             </button>
           </div>
-          <p class="hint" style="margin: -2px 0 6px; padding-left: 0">从备份文件恢复书籍和设置，已有书籍按文件路径合并</p>
+          <p class="hint" style="margin: -2px 0 6px; padding-left: 0">从备份文件导入配置，将新增为独立配置项</p>
+
+          <div class="divider"></div>
+
+          <div class="setting-row">
+            <label>导出书籍</label>
+            <button class="btn-secondary" :disabled="isExportingBooks" @click="exportBooks"
+              style="padding: 5px 14px; font-size: 12px">
+              {{ isExportingBooks ? '导出中...' : '导出书籍' }}
+            </button>
+          </div>
+          <p class="hint" style="margin: -2px 0 6px; padding-left: 0">将书架书籍信息导出为 JSON 文件（不含封面图片）</p>
+
+          <div class="setting-row">
+            <label>导入书籍</label>
+            <button class="btn-secondary" :disabled="isImportingBooks" @click="importBooks"
+              style="padding: 5px 14px; font-size: 12px">
+              {{ isImportingBooks ? '导入中...' : '导入书籍' }}
+            </button>
+          </div>
+          <p class="hint" style="margin: -2px 0 6px; padding-left: 0">从备份文件导入书籍到书架，自动跳过路径重复的书籍</p>
 
         </div>
       </div>
@@ -721,6 +861,8 @@ function commitCapture(targetArr: string[]) {
         </div>
       </div>
     </div>
+
+    <Toast :message="toastMessage" :type="toastType" />
   </div>
 </template>
 
