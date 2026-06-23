@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, inject, onMounted, onBeforeUnmount, watch } from 'vue'
-import { useBookStore } from '../../stores/books'
+import { useBookStore, type Bookmark } from '../../stores/books'
 import { useConfigStore } from '../../stores/config'
 import { useReaderStore } from '../../stores/reader'
 import { parseTxt } from '../../utils/txtParser'
@@ -127,9 +127,52 @@ function jumpToChapter(chapterIndex: number) {
   showChapterList.value = false
   const bookId = chapterListBookId.value
   if (!bookId) return
-  // Set lastChapter so it opens at that chapter
   bookStore.updateBook(bookId, { lastChapter: chapterIndex, lastPage: 0 })
   openBookAndHushreader?.(bookId)
+}
+
+// Bookmark list modal
+const showBookmarkList = ref(false)
+const bookmarkListBookId = ref<string | null>(null)
+
+function openBookmarkList(bookId: string) {
+  closeContextMenu()
+  bookmarkListBookId.value = bookId
+  showBookmarkList.value = true
+}
+
+function getBookmarkList(): Bookmark[] {
+  if (!bookmarkListBookId.value) return []
+  const book = bookStore.books.find(b => b.id === bookmarkListBookId.value)
+  return book?.bookmarks ?? []
+}
+
+function formatBookmarkDate(ts: number): string {
+  const d = new Date(ts)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function formatBookmarkText(text: string): string {
+  if (text.length <= 50) return text
+  return text.slice(0, 50) + '...'
+}
+
+function jumpToBookmark(bookmark: Bookmark) {
+  const bookId = bookmarkListBookId.value
+  if (!bookId) return
+  showBookmarkList.value = false
+  bookStore.updateBook(bookId, { lastChapter: bookmark.chapterIndex, progressIndex: bookmark.charIndex })
+  openBookAndHushreader?.(bookId)
+}
+
+function deleteBookmark(bookmarkId: string) {
+  if (!bookmarkListBookId.value) return
+  const book = bookStore.books.find(b => b.id === bookmarkListBookId.value)
+  if (!book?.bookmarks) return
+  bookStore.updateBook(bookmarkListBookId.value, {
+    bookmarks: book.bookmarks.filter(bm => bm.id !== bookmarkId)
+  })
 }
 
 // Change file path
@@ -368,6 +411,12 @@ function openDeleteModal(bookId: string) {
   closeContextMenu()
   deleteBookId.value = bookId
   showDeleteModal.value = true
+}
+
+function markUnfinished(bookId: string) {
+  closeContextMenu()
+  bookStore.updateBook(bookId, { finishedAt: undefined })
+  toast('已标记为未读完', 'success')
 }
 
 function confirmDelete() {
@@ -851,6 +900,18 @@ watch(() => configStore.config.other.plainTextCover, async (plain) => {
 
 
 const cfg = computed(() => configStore.config)
+
+const statsTotal = computed(() => bookStore.books.length)
+const statsRead = computed(() => bookStore.books.filter(b => b.lastReadAt).length)
+const statsReadingTimeMs = computed(() => bookStore.books.reduce((sum, b) => sum + (b.readingTimeMs || 0), 0))
+
+function formatReadingTime(ms: number): string {
+  const totalMin = Math.floor(ms / 60000)
+  if (totalMin < 60) return `${totalMin}分钟`
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  return m > 0 ? `${h}小时${m}分` : `${h}小时`
+}
 </script>
 
 <template>
@@ -905,6 +966,15 @@ const cfg = computed(() => configStore.config)
       </div>
     </header>
 
+    <!-- Stats bar -->
+    <div class="stats-bar">
+      <span class="stats-item"><span class="stats-value">{{ statsTotal }}</span>本书</span>
+      <span class="stats-divider"></span>
+      <span class="stats-item"><span class="stats-value">{{ statsRead }}</span>本已读</span>
+      <span class="stats-divider"></span>
+      <span class="stats-item">累计阅读<span class="stats-value">{{ formatReadingTime(statsReadingTimeMs) }}</span></span>
+    </div>
+
     <!-- Category tabs -->
     <div class="category-bar">
       <button v-if="selectionMode" class="category-tab select-all-btn"
@@ -956,12 +1026,15 @@ const cfg = computed(() => configStore.config)
     </div>
 
     <!-- Context Menu -->
-    <ContextMenu v-if="contextMenuBook" :pos="contextMenuPos" @book-info="openBookInfo(contextMenuBook!)"
-      @chapter-list="openChapterList(contextMenuBook!)" @change-path="openPathModal(contextMenuBook!)"
+    <ContextMenu v-if="contextMenuBook" :pos="contextMenuPos"
+      :is-finished="!!bookStore.books.find(b => b.id === contextMenuBook)?.finishedAt"
+      @book-info="openBookInfo(contextMenuBook!)" @chapter-list="openChapterList(contextMenuBook!)"
+      @bookmark-list="openBookmarkList(contextMenuBook!)" @change-path="openPathModal(contextMenuBook!)"
       @open-file-location="openFileLocation(contextMenuBook!)" @edit-metadata="openMetadataModal(contextMenuBook!)"
       @reload-metadata="openReloadMetadata(contextMenuBook!)" @set-category="openCategoryModal(contextMenuBook!)"
       @set-cover="openCoverPicker(contextMenuBook!)" @restore-cover="openRestoreCover(contextMenuBook!)"
-      @delete="openDeleteModal(contextMenuBook!)" @close="closeContextMenu" />
+      @mark-unfinished="markUnfinished(contextMenuBook!)" @delete="openDeleteModal(contextMenuBook!)"
+      @close="closeContextMenu" />
 
     <!-- Settings Modal -->
     <SettingsModal v-if="showSettings" @close="showSettings = false" />
@@ -980,6 +1053,29 @@ const cfg = computed(() => configStore.config)
             <span class="ch-title">{{ ch.title }}</span>
           </button>
         </div>
+      </div>
+    </Modal>
+
+    <!-- Bookmark List Modal -->
+    <Modal v-if="showBookmarkList" title="书签列表" @close="showBookmarkList = false">
+      <div class="bookmark-list">
+        <div v-if="getBookmarkList().length === 0" class="bookmark-empty">暂无书签</div>
+        <div v-else class="bookmark-items">
+          <div v-for="bm in getBookmarkList()" :key="bm.id" class="bookmark-item" @dblclick="jumpToBookmark(bm)">
+            <div class="bookmark-info">
+              <span class="bookmark-date">{{ formatBookmarkDate(bm.createdAt) }}</span>
+              <span class="bookmark-percent">{{ bm.readingPercent.toFixed(1) }}%</span>
+            </div>
+            <div class="bookmark-text">{{ formatBookmarkText(bm.text) }}</div>
+            <button class="bookmark-delete" @click.stop="deleteBookmark(bm.id)" title="删除书签">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <p class="bookmark-hint">双击书签跳转到对应位置</p>
       </div>
     </Modal>
 
@@ -1182,6 +1278,35 @@ const cfg = computed(() => configStore.config)
   display: flex;
   gap: 6px;
   flex-shrink: 0;
+}
+
+.stats-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px 8px;
+  font-size: 12px;
+  color: var(--c-ink-tertiary);
+  flex-shrink: 0;
+}
+
+.stats-item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.stats-value {
+  color: var(--c-ink-secondary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
+
+.stats-divider {
+  width: 1px;
+  height: 12px;
+  background: var(--c-border);
 }
 
 .icon-btn {
@@ -1639,5 +1764,98 @@ const cfg = computed(() => configStore.config)
   bottom: 20px;
   right: 20px;
   z-index: 100;
+}
+
+.bookmark-list {
+  min-width: 280px;
+}
+
+.bookmark-empty {
+  text-align: center;
+  color: var(--c-ink-tertiary);
+  padding: 24px 0;
+  font-size: 13px;
+}
+
+.bookmark-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.bookmark-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 32px 10px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s var(--ease-out);
+}
+
+.bookmark-item:hover {
+  background: var(--c-surface-sunken);
+}
+
+.bookmark-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bookmark-date {
+  font-size: 12px;
+  color: var(--c-ink-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.bookmark-percent {
+  font-size: 11px;
+  color: var(--c-accent);
+  background: var(--c-accent-soft);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+}
+
+.bookmark-text {
+  font-size: 13px;
+  color: var(--c-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookmark-delete {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--c-ink-tertiary);
+  opacity: 0;
+  transition: all 0.12s var(--ease-out);
+}
+
+.bookmark-item:hover .bookmark-delete {
+  opacity: 1;
+}
+
+.bookmark-delete:hover {
+  background: var(--c-danger-soft);
+  color: var(--c-danger);
+}
+
+.bookmark-hint {
+  margin: 12px 0 0;
+  font-size: 11px;
+  color: var(--c-ink-tertiary);
+  text-align: center;
 }
 </style>

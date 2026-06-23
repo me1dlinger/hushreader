@@ -77,6 +77,7 @@ function progressText(book: Book): string {
         <span class="progress-bar" :style="{ width: progressText(book) }"></span>
         <span class="progress-label">{{ progressText(book) }}</span>
       </span>
+      <span v-if="book.finishedAt" class="finished-badge">已读完</span>
     </div>
 
     <!-- Info -->
@@ -260,5 +261,20 @@ function progressText(book: Book): string {
   margin-top: 2px;
   font-size: 11px;
   color: var(--c-ink-tertiary);
+}
+
+.finished-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--c-accent);
+  color: var(--c-ink-inverse);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  z-index: 2;
+  pointer-events: none;
 }
 </style>
