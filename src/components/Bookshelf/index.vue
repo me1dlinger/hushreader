@@ -503,6 +503,246 @@ function openReloadMetadata(bookId: string) {
   reloadMetadata(bookId)
 }
 
+// Full-text search modal
+const showSearchModal = ref(false)
+const searchBookId = ref<string | null>(null)
+const searchKeyword = ref('')
+const searchResults = ref<{ charOffset: number; sentence: string; percent: number }[]>([])
+const searchLoading = ref(false)
+const searchPage = ref(1)
+
+function openSearchModal(bookId: string) {
+  closeContextMenu()
+  searchBookId.value = bookId
+  searchKeyword.value = ''
+  searchResults.value = []
+  searchPage.value = 1
+  showSearchModal.value = true
+}
+
+const SEARCH_PAGE_SIZE = 10
+
+const searchPagedResults = computed(() => {
+  const start = (searchPage.value - 1) * SEARCH_PAGE_SIZE
+  return searchResults.value.slice(start, start + SEARCH_PAGE_SIZE)
+})
+
+const searchTotalPages = computed(() => Math.max(1, Math.ceil(searchResults.value.length / SEARCH_PAGE_SIZE)))
+
+function highlightKeyword(text: string, keyword: string): string {
+  if (!keyword) return text
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return text.replace(new RegExp(escaped, 'gi'), '<mark>$&</mark>')
+}
+
+function formatSearchResult(sentence: string, keyword: string): string {
+  const maxLen = 20
+  const idx = sentence.toLowerCase().indexOf(keyword.toLowerCase())
+  if (idx === -1) return sentence.length <= maxLen ? sentence : sentence.slice(0, maxLen) + '...'
+  const minEnd = idx + keyword.length + 5
+  const end = Math.max(minEnd, maxLen)
+  if (sentence.length <= end) return sentence
+  return sentence.slice(0, end) + '...'
+}
+
+async function executeSearch() {
+  const bookId = searchBookId.value
+  const keyword = searchKeyword.value.trim()
+  if (!bookId || !keyword) return
+
+  const book = bookStore.books.find(b => b.id === bookId)
+  if (!book) return
+
+  searchLoading.value = true
+  searchResults.value = []
+  searchPage.value = 1
+
+  try {
+    let fullText = ''
+
+    if (book.format === 'txt') {
+      fullText = window.services?.readFile(book.filePath) ?? ''
+    } else if (book.format === 'mobi') {
+      const content = window.services?.readFileBinary?.(book.filePath)
+      if (content) {
+        const blob = new Blob([content], { type: 'application/x-mobipocket-ebook' })
+        const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.mobi')
+        const result = await parseMobi(file)
+        if (result.error) { toast(`搜索失败：${result.error}`, 'error'); searchLoading.value = false; return }
+        fullText = result.chapters.map(c => c.content || '').join('\n')
+      }
+    } else {
+      const content = window.services?.readFileBinary?.(book.filePath)
+      if (content) {
+        const blob = new Blob([content], { type: 'application/epub+zip' })
+        const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.epub')
+        const { chapters: parsed } = await parseEpub(file)
+        fullText = parsed.map(c => c.content || '').join('\n')
+      }
+    }
+
+    if (!fullText) {
+      toast('无法加载书籍内容', 'error')
+      searchLoading.value = false
+      return
+    }
+
+    const totalLen = fullText.length
+    const boundaryRe = /[。！？…!?\.\」\』\）\】\」]/g
+    const sentenceEndRe = /[。！？…!?\.]/
+    const kwLower = keyword.toLowerCase()
+    const results: typeof searchResults.value = []
+    let pos = 0
+
+    while (pos < fullText.length) {
+      const kwIdx = fullText.toLowerCase().indexOf(kwLower, pos)
+      if (kwIdx === -1) break
+
+      let start = 0
+      const beforeKw = fullText.slice(0, kwIdx)
+      let lastBoundary = -1
+      let m: RegExpExecArray | null
+      boundaryRe.lastIndex = 0
+      while ((m = boundaryRe.exec(beforeKw)) !== null) {
+        lastBoundary = m.index + m[0].length
+      }
+      if (lastBoundary >= 0) {
+        start = lastBoundary
+        while (start < fullText.length && /[\s\u3000]/.test(fullText[start])) start++
+      }
+      if (start > kwIdx) start = 0
+
+      const rest = fullText.slice(start)
+      const endMatch = sentenceEndRe.exec(rest)
+      let sentence: string
+      let sentenceEnd: number
+      if (endMatch) {
+        sentenceEnd = start + endMatch.index + endMatch[0].length
+        sentence = fullText.slice(start, sentenceEnd).trim()
+      } else {
+        sentence = rest.trim().slice(0, 50)
+        sentenceEnd = start + rest.trim().slice(0, 50).length
+      }
+
+      const alreadyFound = results.some(r => r.charOffset >= start && r.charOffset < sentenceEnd)
+      if (!alreadyFound) {
+        const percent = totalLen > 0 ? (start / totalLen) * 100 : 0
+        results.push({
+          charOffset: start,
+          sentence,
+          percent
+        })
+      }
+
+      pos = sentenceEnd > start ? sentenceEnd : kwIdx + 1
+    }
+
+    searchResults.value = results
+  } catch (e: any) {
+    toast(`搜索失败：${e.message}`, 'error')
+  } finally {
+    searchLoading.value = false
+  }
+}
+
+function jumpToSearchResult(result: { charOffset: number }) {
+  const bookId = searchBookId.value
+  if (!bookId) return
+  const book = bookStore.books.find(b => b.id === bookId)
+  if (!book) return
+
+  showSearchModal.value = false
+
+  let chapters: { index: number; content: string }[] = []
+  if (book.format === 'txt') {
+    const text = window.services?.readFile(book.filePath) ?? ''
+    const parsed = parseTxt(text, configStore.config.other.chapterRegex || undefined)
+    chapters = parsed.map(c => ({ index: c.index, content: c.content || '' }))
+  } else if (book.format === 'mobi') {
+    const content = window.services?.readFileBinary?.(book.filePath)
+    if (content) {
+      const blob = new Blob([content], { type: 'application/x-mobipocket-ebook' })
+      const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.mobi')
+      parseMobi(file).then(r => {
+        if (!r.error) {
+          const chs = r.chapters.map(c => ({ index: c.index, content: c.content || '' }))
+          jumpToOffset(bookId, chs, result.charOffset)
+        }
+      })
+      return
+    }
+  } else {
+    const content = window.services?.readFileBinary?.(book.filePath)
+    if (content) {
+      const blob = new Blob([content], { type: 'application/epub+zip' })
+      const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.epub')
+      parseEpub(file).then(({ chapters: parsed }) => {
+        const chs = parsed.map(c => ({ index: c.index, content: c.content || '' }))
+        jumpToOffset(bookId, chs, result.charOffset)
+      })
+      return
+    }
+  }
+
+  jumpToOffset(bookId, chapters, result.charOffset)
+}
+
+function jumpToOffset(bookId: string, chapters: { index: number; content: string }[], offset: number) {
+  let cumLen = 0
+  for (const ch of chapters) {
+    const chLen = ch.content.length + 1
+    if (cumLen + ch.content.length > offset) {
+      const charIndex = offset - cumLen
+      bookStore.updateBook(bookId, { lastChapter: ch.index, progressIndex: charIndex })
+      openBookAndHushreader?.(bookId)
+      return
+    }
+    cumLen += chLen
+  }
+  const last = chapters[chapters.length - 1]
+  if (last) {
+    bookStore.updateBook(bookId, { lastChapter: last.index, progressIndex: 0 })
+    openBookAndHushreader?.(bookId)
+  }
+}
+
+// Batch category modal
+const showBatchCategoryModal = ref(false)
+const batchCategorySelected = ref<string[]>([])
+const batchCategoryNew = ref('')
+
+function openBatchCategory() {
+  if (selectedIds.value.size === 0) return
+  batchCategorySelected.value = []
+  batchCategoryNew.value = ''
+  showBatchCategoryModal.value = true
+}
+
+function toggleBatchCategorySelection(cat: string) {
+  const idx = batchCategorySelected.value.indexOf(cat)
+  if (idx > -1) {
+    batchCategorySelected.value.splice(idx, 1)
+  } else {
+    batchCategorySelected.value.push(cat)
+  }
+}
+
+function confirmBatchCategory() {
+  const newCats = batchCategoryNew.value
+    .split(/[,，]/)
+    .map(s => s.trim())
+    .filter(Boolean)
+  const finalCats = [...new Set([...batchCategorySelected.value, ...newCats])]
+
+  for (const id of selectedIds.value) {
+    bookStore.updateBook(id, { categories: finalCats.length > 0 ? finalCats : undefined })
+  }
+
+  showBatchCategoryModal.value = false
+  toast(`已为 ${selectedIds.value.size} 本书设置分类`, 'success')
+  exitSelectionMode()
+}
+
 // Multi-select mode
 const selectionMode = ref(false)
 const selectedIds = ref<Set<string>>(new Set())
@@ -1029,12 +1269,12 @@ function formatReadingTime(ms: number): string {
     <ContextMenu v-if="contextMenuBook" :pos="contextMenuPos"
       :is-finished="!!bookStore.books.find(b => b.id === contextMenuBook)?.finishedAt"
       @book-info="openBookInfo(contextMenuBook!)" @chapter-list="openChapterList(contextMenuBook!)"
-      @bookmark-list="openBookmarkList(contextMenuBook!)" @change-path="openPathModal(contextMenuBook!)"
-      @open-file-location="openFileLocation(contextMenuBook!)" @edit-metadata="openMetadataModal(contextMenuBook!)"
-      @reload-metadata="openReloadMetadata(contextMenuBook!)" @set-category="openCategoryModal(contextMenuBook!)"
-      @set-cover="openCoverPicker(contextMenuBook!)" @restore-cover="openRestoreCover(contextMenuBook!)"
-      @mark-unfinished="markUnfinished(contextMenuBook!)" @delete="openDeleteModal(contextMenuBook!)"
-      @close="closeContextMenu" />
+      @bookmark-list="openBookmarkList(contextMenuBook!)" @search-jump="openSearchModal(contextMenuBook!)"
+      @change-path="openPathModal(contextMenuBook!)" @open-file-location="openFileLocation(contextMenuBook!)"
+      @edit-metadata="openMetadataModal(contextMenuBook!)" @reload-metadata="openReloadMetadata(contextMenuBook!)"
+      @set-category="openCategoryModal(contextMenuBook!)" @set-cover="openCoverPicker(contextMenuBook!)"
+      @restore-cover="openRestoreCover(contextMenuBook!)" @mark-unfinished="markUnfinished(contextMenuBook!)"
+      @delete="openDeleteModal(contextMenuBook!)" @close="closeContextMenu" />
 
     <!-- Settings Modal -->
     <SettingsModal v-if="showSettings" @close="showSettings = false" />
@@ -1076,6 +1316,43 @@ function formatReadingTime(ms: number): string {
           </div>
         </div>
         <p class="bookmark-hint">双击书签跳转到对应位置</p>
+      </div>
+    </Modal>
+
+    <!-- Search Jump Modal -->
+    <Modal v-if="showSearchModal" title="搜索跳转" @close="showSearchModal = false">
+      <div class="search-modal">
+        <div class="search-bar">
+          <input v-model="searchKeyword" class="form-input search-input-modal" placeholder="输入搜索关键词..."
+            @keydown.enter="executeSearch" />
+          <button class="btn-primary" :disabled="!searchKeyword.trim() || searchLoading" @click="executeSearch">
+            <span v-if="searchLoading" class="spinner"
+              style="width:14px;height:14px;border-width:1.5px;margin-right:4px"></span>
+            搜索
+          </button>
+        </div>
+        <div v-if="searchResults.length > 0" class="search-meta">
+          共 {{ searchResults.length }} 条结果，第 {{ searchPage }}/{{ searchTotalPages }} 页
+        </div>
+        <div v-if="searchResults.length > 0" class="search-results">
+          <div v-for="(r, i) in searchPagedResults" :key="i" class="search-result-item"
+            @dblclick="jumpToSearchResult(r)">
+            <div class="search-result-info">
+              <span class="search-result-percent">{{ r.percent.toFixed(1) }}%</span>
+            </div>
+            <div class="search-result-text"
+              v-html="highlightKeyword(formatSearchResult(r.sentence, searchKeyword), searchKeyword)"></div>
+          </div>
+        </div>
+        <div v-if="searchResults.length === 0 && !searchLoading && searchKeyword.trim()" class="search-empty">
+          暂无结果
+        </div>
+        <div v-if="searchResults.length > SEARCH_PAGE_SIZE" class="search-pagination">
+          <button class="btn-secondary" :disabled="searchPage <= 1" @click="searchPage--">上一页</button>
+          <span class="search-page-info">{{ searchPage }} / {{ searchTotalPages }}</span>
+          <button class="btn-secondary" :disabled="searchPage >= searchTotalPages" @click="searchPage++">下一页</button>
+        </div>
+        <p class="bookmark-hint">双击结果跳转到对应位置</p>
       </div>
     </Modal>
 
@@ -1166,6 +1443,7 @@ function formatReadingTime(ms: number): string {
             style="width:14px;height:14px;border-width:1.5px;margin-right:4px"></span>
           批量重载
         </button>
+        <button class="btn-secondary" :disabled="selectedCount === 0" @click="openBatchCategory">批量设置分类</button>
         <button class="btn-danger" :disabled="selectedCount === 0" @click="openBatchDelete">批量删除</button>
         <button class="btn-ghost" @click="exitSelectionMode">取消</button>
       </div>
@@ -1178,6 +1456,28 @@ function formatReadingTime(ms: number): string {
         <div class="form-actions">
           <button class="btn-secondary" @click="showBatchDeleteModal = false">取消</button>
           <button class="btn-danger" @click="confirmBatchDelete">删除</button>
+        </div>
+      </div>
+    </Modal>
+
+    <!-- Batch Category Modal -->
+    <Modal v-if="showBatchCategoryModal" title="批量设置分类" @close="showBatchCategoryModal = false">
+      <div class="form-modal">
+        <p class="form-hint" style="margin: 0 0 8px">将为选中的 {{ selectedCount }} 本书统一设置以下分类（覆盖原有分类）</p>
+        <label class="form-label">已有分类（多选）</label>
+        <div v-if="bookStore.categories.length > 1" class="category-tags">
+          <button v-for="cat in bookStore.categories.filter(c => c !== '全部')" :key="cat" class="category-tag"
+            :class="{ active: batchCategorySelected.includes(cat) }" @click="toggleBatchCategorySelection(cat)">
+            {{ cat }}
+          </button>
+        </div>
+        <p v-else class="form-hint">暂无其他分类</p>
+        <label class="form-label" style="margin-top: 12px">新建分类</label>
+        <input v-model="batchCategoryNew" class="form-input" placeholder="输入新分类名称，多个用逗号分隔..." />
+        <p class="form-hint">留空则不添加新分类</p>
+        <div class="form-actions">
+          <button class="btn-secondary" @click="showBatchCategoryModal = false">取消</button>
+          <button class="btn-primary" @click="confirmBatchCategory">确认</button>
         </div>
       </div>
     </Modal>
@@ -1857,5 +2157,103 @@ function formatReadingTime(ms: number): string {
   font-size: 11px;
   color: var(--c-ink-tertiary);
   text-align: center;
+}
+
+.search-modal {
+  min-width: 320px;
+}
+
+.search-bar {
+  display: flex;
+  gap: 8px;
+}
+
+.search-input-modal {
+  flex: 1;
+}
+
+.search-meta {
+  font-size: 12px;
+  color: var(--c-ink-tertiary);
+  margin-top: 8px;
+}
+
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.search-result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s var(--ease-out);
+}
+
+.search-result-item:hover {
+  background: var(--c-surface-sunken);
+}
+
+.search-result-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-result-chapter {
+  font-size: 12px;
+  color: var(--c-ink-tertiary);
+}
+
+.search-result-percent {
+  font-size: 11px;
+  color: var(--c-accent);
+  background: var(--c-accent-soft);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+}
+
+.search-result-text {
+  font-size: 13px;
+  color: var(--c-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-result-text :deep(mark) {
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.search-empty {
+  text-align: center;
+  color: var(--c-ink-tertiary);
+  padding: 24px 0;
+  font-size: 13px;
+}
+
+.search-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.search-page-info {
+  font-size: 12px;
+  color: var(--c-ink-tertiary);
+  font-variant-numeric: tabular-nums;
 }
 </style>
