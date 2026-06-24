@@ -1176,16 +1176,31 @@ function formatReadingTime(ms: number): string {
         <input v-model="bookStore.searchQuery" class="search-input" placeholder="搜索书名或作者..." />
       </div>
       <div class="shelf-actions">
+        <button class="icon-btn" :class="{ active: cfg.other.listMode }" :title="cfg.other.listMode ? '卡片视图' : '列表视图'"
+          @click="configStore.config.other.listMode = !configStore.config.other.listMode">
+          <svg v-if="cfg.other.listMode" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="6" x2="21" y2="6" />
+            <line x1="8" y1="12" x2="21" y2="12" />
+            <line x1="8" y1="18" x2="21" y2="18" />
+            <line x1="3" y1="6" x2="5" y2="6" />
+            <line x1="3" y1="12" x2="5" y2="12" />
+            <line x1="3" y1="18" x2="5" y2="18" />
+          </svg>
+        </button>
         <button class="icon-btn" :class="{ active: selectionMode }" :title="selectionMode ? '退出多选' : '多选'"
           @click="toggleSelectionMode">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline v-if="selectionMode" points="18 6 6 18" />
             <polyline v-if="selectionMode" points="6 6 18 18" />
             <template v-else>
-              <rect x="3" y="3" width="7" height="7" rx="1" />
-              <rect x="14" y="3" width="7" height="7" rx="1" />
-              <rect x="3" y="14" width="7" height="7" rx="1" />
-              <rect x="14" y="14" width="7" height="7" rx="1" />
+              <polyline points="9 11 12 14 22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
             </template>
           </svg>
         </button>

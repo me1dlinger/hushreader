@@ -790,14 +790,6 @@ function commitCapture(targetArr: string[]) {
           <div class="section-label">书架</div>
 
           <div class="setting-row">
-            <label>列表书架模式</label>
-            <label class="toggle">
-              <input type="checkbox" v-model="cfg.other.listMode" />
-              <span class="toggle-track"></span>
-            </label>
-          </div>
-
-          <div class="setting-row">
             <label>显示纯色封面</label>
             <label class="toggle">
               <input type="checkbox" v-model="cfg.other.plainTextCover" />
